@@ -11,10 +11,14 @@ import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import { app, server } from "./lib/socket.js";
 
+import fs from "fs";
+import { fileURLToPath } from "url";
+
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 5001;
-const __dirname = path.resolve();
 
 // Secure HTTP headers with helmet
 app.use(
@@ -30,18 +34,11 @@ app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 app.use(cookieParser());
 
 // CORS setup
-const allowedOrigins = process.env.CLIENT_URL
-  ? [process.env.CLIENT_URL, "http://localhost:5173", "http://127.0.0.1:5173"]
-  : ["http://localhost:5173", "http://127.0.0.1:5173"];
+const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    },
+    origin: allowedOrigin,
     credentials: true,
   })
 );
@@ -73,18 +70,22 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
+const frontendDist = path.resolve(__dirname, "../../frontend/dist");
+const rootDist = path.resolve(process.cwd(), "frontend/dist");
+const distPath = fs.existsSync(frontendDist) ? frontendDist : rootDist;
+
+if (process.env.NODE_ENV === "production" && fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
 
   app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+    res.sendFile(path.join(distPath, "index.html"));
   });
 }
 
 // Only start the server if this file is executed directly (not when imported in tests)
 if (process.env.NODE_ENV !== "test") {
   server.listen(PORT, () => {
-    console.log(`Server is running on PORT: ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
     connectDB();
   });
 }
