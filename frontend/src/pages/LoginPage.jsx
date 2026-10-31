@@ -1,0 +1,176 @@
+import { useState } from "react";
+import { useAuthStore } from "../store/useAuthStore";
+import AuthImagePattern from "../components/AuthImagePattern";
+import { Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, Sparkles } from "lucide-react";
+
+const LoginPage = () => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+  const { login, isLoggingIn } = useAuthStore();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    login(formData);
+  };
+
+  const handleDemoLogin = (email, password) => {
+    setFormData({ email, password });
+    login({ email, password });
+  };
+
+  return (
+    <div className="min-h-[100dvh] grid lg:grid-cols-2 bg-base-200/50">
+      {/* Left Side - Form & Recruiter Quick Demo */}
+      <div className="flex flex-col justify-center items-center p-6 sm:p-12">
+        <div className="w-full max-w-md space-y-6">
+          {/* Logo & Heading */}
+          <div className="text-center">
+            <div className="flex flex-col items-center gap-2 group">
+              <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-105 transition-all shadow-md">
+                <MessageSquare className="size-6 text-primary" />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-base-content mt-2">
+                Welcome to Chatty
+              </h1>
+              <p className="text-xs sm:text-sm text-base-content/60">
+                Sign in to your account or launch instant recruiter demo
+              </p>
+            </div>
+          </div>
+
+          {/* Recruiter 1-Click Demo Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 border border-primary/20 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                <Sparkles className="size-3.5" />
+                <span>Recruiter Instant Demo (1-Click)</span>
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                Fast Track
+              </span>
+            </div>
+            <p className="text-xs text-base-content/70">
+              Open two browser windows to test real-time Socket.io chat side-by-side:
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isLoggingIn}
+                onClick={() => handleDemoLogin("noby@demo.com", "demo1234")}
+                className="btn btn-sm btn-outline btn-primary rounded-xl flex items-center justify-center gap-2 font-medium hover:scale-[1.02] transition-transform"
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"
+                  alt="Noby"
+                  className="size-5 rounded-full object-cover"
+                />
+                <span className="truncate">Noby (Demo 1)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isLoggingIn}
+                onClick={() => handleDemoLogin("elsa@demo.com", "demo1234")}
+                className="btn btn-sm btn-outline btn-primary rounded-xl flex items-center justify-center gap-2 font-medium hover:scale-[1.02] transition-transform"
+              >
+                <img
+                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
+                  alt="Elsa"
+                  className="size-5 rounded-full object-cover"
+                />
+                <span className="truncate">Elsa (Demo 2)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="divider text-xs text-base-content/40 my-1">OR ENTER CREDENTIALS</div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="form-control">
+              <label className="label py-1">
+                <span className="label-text font-medium text-xs">Email</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40">
+                  <Mail className="size-4" />
+                </div>
+                <input
+                  type="email"
+                  className="input input-bordered w-full pl-9 rounded-xl text-sm bg-base-100"
+                  placeholder="you@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-control">
+              <label className="label py-1">
+                <span className="label-text font-medium text-xs">Password</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40">
+                  <Lock className="size-4" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="input input-bordered w-full pl-9 pr-10 rounded-xl text-sm bg-base-100"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-base-content/40 hover:text-base-content"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary w-full rounded-xl shadow-md shadow-primary/20 mt-2"
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>Signing in...</span>
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </button>
+          </form>
+
+          <div className="text-center text-xs text-base-content/60">
+            Don&apos;t have an account?{" "}
+            <Link to="/signup" className="link link-primary font-semibold">
+              Create account
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Visual Showcase */}
+      <AuthImagePattern
+        title={"Real-Time Messaging Elevated"}
+        subtitle={
+          "Optimistic UI, instant voice notes, full cursor pagination, and enterprise-grade architecture."
+        }
+      />
+    </div>
+  );
+};
+
+export default LoginPage;
