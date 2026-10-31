@@ -2,6 +2,7 @@ import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
+import mongoose from "mongoose";
 
 const DEMO_ACCOUNTS = {
   "noby@demo.com": {
@@ -25,6 +26,12 @@ const DEMO_ACCOUNTS = {
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        message: "Database connection unavailable. Please check MONGODB_URI in Render settings.",
+      });
+    }
+
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -115,11 +122,12 @@ export const login = async (req, res) => {
 
 export const logout = (req, res) => {
   try {
+    const isProduction = process.env.NODE_ENV === "production";
     res.cookie("jwt", "", {
       maxAge: 0,
       httpOnly: true,
-      sameSite: "strict",
-      secure: process.env.NODE_ENV !== "development",
+      sameSite: isProduction ? "none" : "strict",
+      secure: isProduction,
     });
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
