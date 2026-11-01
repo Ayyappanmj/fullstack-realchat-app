@@ -3,25 +3,7 @@ import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
 import mongoose from "mongoose";
-
-const DEMO_ACCOUNTS = {
-  "noby@demo.com": {
-    fullName: "Noby",
-    profilePic: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-  },
-  "elsa@demo.com": {
-    fullName: "Elsa",
-    profilePic: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-  },
-  "alice@demo.com": {
-    fullName: "Elsa",
-    profilePic: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-  },
-  "bob@demo.com": {
-    fullName: "Noby",
-    profilePic: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-  },
-};
+import { DEMO_USERS } from "../lib/demoUsers.js";
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
@@ -65,45 +47,73 @@ export const signup = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in signup controller:", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 };
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const normalizedEmail = email.toLowerCase().trim();
-    let user = await User.findOne({ email: normalizedEmail });
-
-    // Auto-provision demo accounts if requested and missing
-    if (!user && DEMO_ACCOUNTS[normalizedEmail]) {
-      const demoMeta = DEMO_ACCOUNTS[normalizedEmail];
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password || "demo1234", salt);
-
-      user = new User({
-        fullName: demoMeta.fullName,
-        email: normalizedEmail,
-        password: hashedPassword,
-        profilePic: demoMeta.profilePic,
-      });
-      await user.save();
+    if (!email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1-Click Fast-Track Demo Login (guaranteed to succeed for reviewers/recruiters even if DB is offline)
+    if (DEMO_USERS[normalizedEmail] && password === "demo1234") {
+      const demoUser = DEMO_USERS[normalizedEmail];
+
+      if (mongoose.connection.readyState === 1) {
+        try {
+          let user = await User.findOne({ email: normalizedEmail });
+          if (!user) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash("demo1234", salt);
+            user = new User({
+              _id: demoUser._id,
+              fullName: demoUser.fullName,
+              email: normalizedEmail,
+              password: hashedPassword,
+              profilePic: demoUser.profilePic,
+            });
+            await user.save();
+          } else {
+            const isMatch = await bcrypt.compare("demo1234", user.password);
+            if (!isMatch) {
+              const salt = await bcrypt.genSalt(10);
+              user.password = await bcrypt.hash("demo1234", salt);
+              await user.save();
+            }
+          }
+        } catch (dbErr) {
+          console.warn("MongoDB sync failed for demo user, continuing in-memory:", dbErr.message);
+        }
+      }
+
+      generateToken(demoUser._id, res);
+      return res.status(200).json({
+        _id: demoUser._id,
+        fullName: demoUser.fullName,
+        email: demoUser.email,
+        profilePic: demoUser.profilePic,
+      });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        message: "Database connection unavailable. Please check MONGODB_URI in Render settings.",
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if (!isPasswordCorrect) {
-      // If demo account with password demo1234, auto-heal if password was modified
-      if (DEMO_ACCOUNTS[normalizedEmail] && password === "demo1234") {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash("demo1234", salt);
-        await user.save();
-      } else {
-        return res.status(400).json({ message: "Invalid credentials" });
-      }
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     generateToken(user._id, res);
@@ -116,7 +126,7 @@ export const login = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in login controller:", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 };
 
@@ -146,7 +156,7 @@ export const updateProfile = async (req, res) => {
     }
 
     let secureUrl = profilePic;
-    if (process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_KEY !== "undefined") {
+    if (profilePic.startsWith("data:")) {
       try {
         const uploadResponse = await cloudinary.uploader.upload(profilePic);
         secureUrl = uploadResponse.secure_url;
@@ -155,13 +165,22 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { profilePic: secureUrl },
-      { new: true }
-    ).select("-password");
+    if (mongoose.connection.readyState === 1) {
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { profilePic: secureUrl },
+        { new: true }
+      ).select("-password");
+      return res.status(200).json(updatedUser);
+    }
 
-    res.status(200).json(updatedUser);
+    const demoUser = Object.values(DEMO_USERS).find((u) => u._id.toString() === userId.toString());
+    if (demoUser) {
+      demoUser.profilePic = secureUrl;
+      return res.status(200).json(demoUser);
+    }
+
+    return res.status(200).json({ ...req.user, profilePic: secureUrl });
   } catch (error) {
     console.error("Error in update profile:", error.message);
     res.status(500).json({ message: "Internal server error" });

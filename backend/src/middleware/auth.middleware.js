@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
+import mongoose from "mongoose";
+import { DEMO_USERS } from "../lib/demoUsers.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
@@ -16,14 +18,24 @@ export const protectRoute = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized - Invalid Token" });
     }
 
-    const user = await User.findById(decoded.userId).select("-password");
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // Check demo users fast-path (guaranteed availability for reviewer/recruiter testing)
+    const demoUser = Object.values(DEMO_USERS).find(
+      (u) => u._id.toString() === decoded.userId.toString()
+    );
+    if (demoUser) {
+      req.user = demoUser;
+      return next();
     }
 
-    req.user = user;
-    next();
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findById(decoded.userId).select("-password");
+      if (user) {
+        req.user = user;
+        return next();
+      }
+    }
+
+    return res.status(404).json({ message: "User not found" });
   } catch (error) {
     console.error("Error in protectRoute middleware: ", error.message);
     res.status(500).json({ message: "Internal server error" });
