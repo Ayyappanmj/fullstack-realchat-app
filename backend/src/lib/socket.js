@@ -3,6 +3,7 @@ import http from "http";
 import express from "express";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
+import jwt from "jsonwebtoken";
 
 const app = express();
 const server = http.createServer(app);
@@ -70,7 +71,24 @@ export function getAllOnlineUsers() {
 }
 
 io.on("connection", (socket) => {
-  const userId = socket.handshake.query.userId;
+  let userId = socket.handshake.query?.userId;
+
+  // Resilient fallback: extract userId from auth token if query param is missing or undefined
+  if (!userId || userId === "undefined") {
+    const token = socket.handshake.auth?.token;
+    if (token) {
+      try {
+        const secret = process.env.JWT_SECRET || "default_chat_app_jwt_secret_dev_testing";
+        const decoded = jwt.verify(token, secret);
+        if (decoded?.userId) {
+          userId = decoded.userId.toString();
+        }
+      } catch (err) {
+        // invalid token ignored for public socket handshake
+      }
+    }
+  }
+
   if (userId && userId !== "undefined") {
     userSocketMap[userId] = socket.id;
   }

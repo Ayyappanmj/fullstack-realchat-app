@@ -18,3 +18,15 @@ export const axiosInstance = axios.create({
   baseURL: getBaseUrl(),
   withCredentials: true,
 });
+
+// Interceptor to attach JWT token from localStorage (ensures cross-site & Incognito mode compatibility)
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("chat_jwt");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);

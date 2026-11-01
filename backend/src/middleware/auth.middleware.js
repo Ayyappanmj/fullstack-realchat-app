@@ -5,9 +5,11 @@ import { DEMO_USERS } from "../lib/demoUsers.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
-    let token = req.cookies?.jwt;
-    if (!token && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    let token = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
+    } else if (req.cookies?.jwt) {
+      token = req.cookies.jwt;
     }
 
     if (!token) {

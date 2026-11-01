@@ -15,6 +15,13 @@ const Sidebar = () => {
     getUsers();
   }, [getUsers]);
 
+  // Self-heal: If initial contacts fetch failed or empty while online users arrive, auto re-fetch
+  useEffect(() => {
+    if (users.length === 0 && !isUsersLoading && onlineUsers.length > 0) {
+      getUsers();
+    }
+  }, [onlineUsers, users.length, isUsersLoading, getUsers]);
+
   const onlineCount = useMemo(() => {
     return users.filter((user) => onlineUsers.includes(user._id)).length;
   }, [users, onlineUsers]);

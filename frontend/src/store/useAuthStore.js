@@ -32,10 +32,14 @@ export const useAuthStore = create((set, get) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
+      if (res.data?.token) {
+        localStorage.setItem("chat_jwt", res.data.token);
+      }
       set({ authUser: res.data });
       get().connectSocket();
     } catch (error) {
       console.log("Error in checkAuth:", error);
+      localStorage.removeItem("chat_jwt");
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });
@@ -46,6 +50,9 @@ export const useAuthStore = create((set, get) => ({
     set({ isSigningUp: true });
     try {
       const res = await axiosInstance.post("/auth/signup", data);
+      if (res.data?.token) {
+        localStorage.setItem("chat_jwt", res.data.token);
+      }
       set({ authUser: res.data });
       toast.success("Account created successfully");
       get().connectSocket();
@@ -62,6 +69,9 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", data);
+      if (res.data?.token) {
+        localStorage.setItem("chat_jwt", res.data.token);
+      }
       set({ authUser: res.data });
       toast.success("Logged in successfully");
       get().connectSocket();
@@ -78,11 +88,13 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
+    } catch (error) {
+      console.warn("Logout error:", error);
+    } finally {
+      localStorage.removeItem("chat_jwt");
       set({ authUser: null });
       toast.success("Logged out successfully");
       get().disconnectSocket();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to log out");
     }
   },
 
@@ -105,9 +117,14 @@ export const useAuthStore = create((set, get) => ({
     if (!authUser) return;
     if (socket?.connected) return;
 
+    const token = localStorage.getItem("chat_jwt") || authUser.token;
+
     const newSocket = io(BASE_URL, {
       query: {
         userId: authUser._id,
+      },
+      auth: {
+        token,
       },
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
