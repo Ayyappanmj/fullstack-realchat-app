@@ -132,7 +132,7 @@ export const login = async (req, res) => {
 
 export const logout = (req, res) => {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
     res.cookie("jwt", "", {
       maxAge: 0,
       httpOnly: true,

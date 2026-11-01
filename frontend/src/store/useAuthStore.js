@@ -3,10 +3,22 @@ import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 
-const BASE_URL =
-  import.meta.env.MODE === "development"
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL.replace(/\/api\/?$/, "");
+  }
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return import.meta.env.VITE_SOCKET_URL;
+  }
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "");
+  }
+  return import.meta.env.MODE === "development"
     ? "http://localhost:5001"
-    : "https://fullstack-realchat-app.onrender.com";
+    : "https://realchat-backend-toqe.onrender.com";
+};
+
+const BASE_URL = getSocketUrl();
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
