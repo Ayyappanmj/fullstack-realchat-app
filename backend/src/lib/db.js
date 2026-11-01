@@ -1,4 +1,12 @@
 import mongoose from "mongoose";
+import dns from "dns";
+
+// Ensure DNS resolution for mongodb+srv records works reliably across all host environments
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch (e) {
+  // Ignore in sandboxed environments where setServers is restricted
+}
 
 export const connectDB = async () => {
   if (process.env.MONGODB_URI) {
