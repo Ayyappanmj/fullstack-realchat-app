@@ -33,12 +33,16 @@ export const useChatStore = create((set, get) => ({
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
-  getUsers: async () => {
+  getUsers: async (retryCount = 0) => {
     set({ isUsersLoading: true });
     try {
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
     } catch (error) {
+      if (retryCount < 2 && (error.response?.status === 401 || !error.response)) {
+        setTimeout(() => get().getUsers(retryCount + 1), 500);
+        return;
+      }
       toast.error(error.response?.data?.message || "Failed to load contacts");
     } finally {
       set({ isUsersLoading: false });
