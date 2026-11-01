@@ -20,6 +20,9 @@ const getSocketUrl = () => {
 
 const BASE_URL = getSocketUrl();
 
+let keepAliveTimer = null;
+let lifecycleBound = false;
+
 export const useAuthStore = create((set, get) => ({
   authUser: null,
   isSigningUp: false,
@@ -37,6 +40,7 @@ export const useAuthStore = create((set, get) => ({
       }
       set({ authUser: res.data });
       get().connectSocket();
+      get().startKeepAlive();
     } catch (error) {
       console.log("Error in checkAuth:", error);
       localStorage.removeItem("chat_jwt");
@@ -56,6 +60,7 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       toast.success("Account created successfully");
       get().connectSocket();
+      get().startKeepAlive();
     } catch (error) {
       const msg = error.response?.data?.message || "Failed to create account";
       toast.error(msg);
@@ -75,6 +80,7 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       toast.success("Logged in successfully");
       get().connectSocket();
+      get().startKeepAlive();
       return res.data;
     } catch (error) {
       const msg = error.response?.data?.message || "Invalid email or password";
@@ -94,6 +100,7 @@ export const useAuthStore = create((set, get) => ({
       localStorage.removeItem("chat_jwt");
       set({ authUser: null });
       toast.success("Logged out successfully");
+      get().stopKeepAlive();
       get().disconnectSocket();
     }
   },
@@ -112,10 +119,52 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Keep Render container warm and prevent sleep during active user sessions
+  startKeepAlive: () => {
+    if (keepAliveTimer) return;
+    keepAliveTimer = setInterval(() => {
+      if (get().authUser) {
+        axiosInstance.get("/health").catch(() => {});
+      }
+    }, 4 * 60 * 1000); // every 4 minutes
+
+    if (!lifecycleBound && typeof window !== "undefined") {
+      lifecycleBound = true;
+
+      // When tab wakes up from background sleep or network restores, immediately ensure socket is connected
+      const wakeHandler = () => {
+        const { authUser, socket } = get();
+        if (authUser) {
+          if (!socket || !socket.connected) {
+            get().connectSocket();
+          }
+        }
+      };
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") wakeHandler();
+      });
+      window.addEventListener("focus", wakeHandler);
+      window.addEventListener("online", wakeHandler);
+    }
+  },
+
+  stopKeepAlive: () => {
+    if (keepAliveTimer) {
+      clearInterval(keepAliveTimer);
+      keepAliveTimer = null;
+    }
+  },
+
   connectSocket: () => {
     const { authUser, socket } = get();
     if (!authUser) return;
     if (socket?.connected) return;
+
+    // Disconnect stale socket instance if any
+    if (socket) {
+      socket.disconnect();
+    }
 
     const token = localStorage.getItem("chat_jwt") || authUser.token;
 
@@ -127,7 +176,11 @@ export const useAuthStore = create((set, get) => ({
         token,
       },
       transports: ["websocket", "polling"],
-      reconnectionAttempts: 5,
+      reconnection: true,
+      reconnectionAttempts: Infinity, // never abandon reconnection
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     newSocket.connect();
@@ -135,6 +188,11 @@ export const useAuthStore = create((set, get) => ({
 
     newSocket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds || [] });
+    });
+
+    // Re-verify online users upon socket reconnect
+    newSocket.on("reconnect", () => {
+      newSocket.emit("refreshPresence");
     });
   },
 

@@ -88,8 +88,8 @@ app.use("/api/auth/signup", authLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageLimiter, messageRoutes);
 
-// Health check endpoint
-app.get("/api/health", (req, res) => {
+// Health check endpoint (keeps Render container warm and responsive)
+app.get(["/health", "/api/health"], (req, res) => {
   res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 

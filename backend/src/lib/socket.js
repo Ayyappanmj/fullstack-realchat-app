@@ -31,6 +31,8 @@ const io = new Server(server, {
     },
     credentials: true,
   },
+  pingInterval: 15000, // 15 seconds
+  pingTimeout: 45000,  // 45 seconds (prevents false disconnects from background tab throttling)
   maxHttpBufferSize: 1e7, // 10MB
 });
 
@@ -59,15 +61,19 @@ if (process.env.REDIS_URL) {
   console.log("Using Socket.io default in-memory adapter");
 }
 
-// used to store online users: { userId: socketId }
-const userSocketMap = {};
+// Stores online users: Map<userId, Set<socketId>>
+// Multi-socket support guarantees reconnects and multi-tab sessions never drop user offline
+const userSocketMap = new Map();
 
 export function getReceiverSocketId(userId) {
-  return userSocketMap[userId];
+  if (!userId) return null;
+  const sockets = userSocketMap.get(userId.toString());
+  if (!sockets || sockets.size === 0) return null;
+  return sockets.size === 1 ? Array.from(sockets)[0] : Array.from(sockets);
 }
 
 export function getAllOnlineUsers() {
-  return Object.keys(userSocketMap);
+  return Array.from(userSocketMap.keys());
 }
 
 io.on("connection", (socket) => {
@@ -90,11 +96,20 @@ io.on("connection", (socket) => {
   }
 
   if (userId && userId !== "undefined") {
-    userSocketMap[userId] = socket.id;
+    const idStr = userId.toString();
+    if (!userSocketMap.has(idStr)) {
+      userSocketMap.set(idStr, new Set());
+    }
+    userSocketMap.get(idStr).add(socket.id);
   }
 
   // Broadcast current online user list
-  io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
+
+  // Allow client to request refreshed online status list
+  socket.on("refreshPresence", () => {
+    socket.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
+  });
 
   // Typing indicators
   socket.on("typing:start", ({ receiverId }) => {
@@ -169,10 +184,17 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    if (userId) {
-      delete userSocketMap[userId];
+    if (userId && userId !== "undefined") {
+      const idStr = userId.toString();
+      const sockets = userSocketMap.get(idStr);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
+          userSocketMap.delete(idStr);
+        }
+      }
     }
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
   });
 });
 

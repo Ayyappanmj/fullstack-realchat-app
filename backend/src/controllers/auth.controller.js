@@ -110,12 +110,16 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({
+        message: "Invalid credentials: No account found with this email. Please sign up first.",
+      });
     }
 
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if (!isPasswordCorrect) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({
+        message: "Invalid credentials: Incorrect password. Please try again.",
+      });
     }
 
     const token = generateToken(user._id, res);

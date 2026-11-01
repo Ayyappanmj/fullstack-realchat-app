@@ -13,6 +13,7 @@ export const connectDB = async () => {
     try {
       const conn = await mongoose.connect(process.env.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
+        family: 4,
       });
       console.log(`MongoDB connected: ${conn.connection.host}`);
       return;
@@ -31,7 +32,7 @@ export const connectDB = async () => {
       const { MongoMemoryServer } = await import("mongodb-memory-server");
       const mongoServer = await MongoMemoryServer.create();
       const uri = mongoServer.getUri();
-      const conn = await mongoose.connect(uri);
+      const conn = await mongoose.connect(uri, { family: 4 });
       console.log(`Embedded MongoDB connected successfully: ${conn.connection.host}`);
     } catch (memError) {
       console.error("MongoDB fallback connection error:", memError.message);
