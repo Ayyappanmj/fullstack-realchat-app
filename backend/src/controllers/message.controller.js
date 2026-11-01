@@ -12,22 +12,27 @@ export const getUsersForSidebar = async (req, res) => {
   try {
     const loggedInUserId = req.user._id?.toString();
 
+    let dbUsers = [];
     if (mongoose.connection.readyState === 1) {
       try {
-        const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
-        if (filteredUsers && filteredUsers.length > 0) {
-          return res.status(200).json(filteredUsers);
-        }
+        dbUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
       } catch (dbErr) {
         console.warn("DB query failed in getUsersForSidebar, falling back to demo users:", dbErr.message);
       }
     }
 
-    // In-memory demo users fallback (guaranteed to give other demo accounts for instant testing)
-    const fallbackUsers = Object.values(DEMO_USERS).filter(
+    // Always include other demo users (Noby / Elsa) for immediate instant testing
+    const otherDemoUsers = Object.values(DEMO_USERS).filter(
       (u) => u._id.toString() !== loggedInUserId
     );
-    return res.status(200).json(fallbackUsers);
+
+    const userMap = new Map();
+    otherDemoUsers.forEach((u) => userMap.set(u._id.toString(), u));
+    if (dbUsers && dbUsers.length > 0) {
+      dbUsers.forEach((u) => userMap.set(u._id.toString(), u));
+    }
+
+    return res.status(200).json(Array.from(userMap.values()));
   } catch (error) {
     console.error("Error in getUsersForSidebar: ", error.message);
     const fallbackUsers = Object.values(DEMO_USERS).filter(
