@@ -13,7 +13,11 @@ export const connectTestDB = async () => {
   process.env.JWT_SECRET = "test_secret_key_1234567890_antigravity";
 
   if (!mongoServer) {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryServer.create({
+      instance: {
+        launchTimeout: 60000,
+      },
+    });
   }
   const uri = mongoServer.getUri();
 

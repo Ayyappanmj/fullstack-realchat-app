@@ -100,9 +100,9 @@ export const useChatStore = create((set, get) => ({
         messages: [...filteredOlder, ...messages],
         hasMoreMessages: stillHasMore,
       });
-      return filteredOlder.length;
     } catch (error) {
-      console.error("Failed to load more messages:", error);
+      console.error("Error loading older messages:", error);
+      toast.error("Could not load older messages");
     } finally {
       set({ isLoadingMore: false });
     }
@@ -135,11 +135,24 @@ export const useChatStore = create((set, get) => ({
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
 
-      // Replace optimistic message with confirmed server response
+      // Replace optimistic message and immediately update conversations list
       set((state) => ({
         messages: state.messages.map((m) =>
           m._id === tempId || m.tempId === tempId ? res.data : m
         ),
+        users: state.users.map((u) => {
+          if (u._id === selectedUser._id) {
+            return {
+              ...u,
+              hasConversation: true,
+              lastMessage:
+                messageData.text ||
+                (messageData.image ? "📷 Photo" : messageData.audio ? "🎤 Voice message" : ""),
+              lastMessageTime: new Date().toISOString(),
+            };
+          }
+          return u;
+        }),
       }));
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -183,6 +196,19 @@ export const useChatStore = create((set, get) => ({
         messages: state.messages.map((m) =>
           m._id === failedMessageId || m.tempId === failedMessageId ? res.data : m
         ),
+        users: state.users.map((u) => {
+          if (u._id === selectedUser._id) {
+            return {
+              ...u,
+              hasConversation: true,
+              lastMessage:
+                targetMsg.text ||
+                (targetMsg.image ? "📷 Photo" : targetMsg.audio ? "🎤 Voice message" : ""),
+              lastMessageTime: new Date().toISOString(),
+            };
+          }
+          return u;
+        }),
       }));
     } catch {
       set((state) => ({
@@ -220,11 +246,12 @@ export const useChatStore = create((set, get) => ({
         socket.emit("message:read", { senderId });
       }
 
-      // Update unread status locally for messages from sender
+      // Update unread status locally for messages from sender and reset user's unread badge
       set((state) => ({
         messages: state.messages.map((m) =>
           m.senderId === senderId && m.status !== "read" ? { ...m, status: "read" } : m
         ),
+        users: state.users.map((u) => (u._id === senderId ? { ...u, unreadCount: 0 } : u)),
       }));
     } catch (error) {
       console.warn("Could not mark messages as read:", error.message);
@@ -289,11 +316,26 @@ export const useChatStore = create((set, get) => ({
         newMessage.text || (newMessage.image ? "Sent a photo" : "Sent a voice note")
       );
 
-      if (isFromSelected) {
-        set((state) => ({
-          messages: [...state.messages, newMessage],
-        }));
+      // Real-time update to messages stream and conversations list
+      set((state) => ({
+        messages: isFromSelected ? [...state.messages, newMessage] : state.messages,
+        users: state.users.map((u) => {
+          if (u._id === newMessage.senderId) {
+            return {
+              ...u,
+              hasConversation: true,
+              lastMessage:
+                newMessage.text ||
+                (newMessage.image ? "📷 Photo" : newMessage.audio ? "🎤 Voice message" : ""),
+              lastMessageTime: newMessage.createdAt || new Date().toISOString(),
+              unreadCount: isFromSelected ? 0 : (u.unreadCount || 0) + 1,
+            };
+          }
+          return u;
+        }),
+      }));
 
+      if (isFromSelected) {
         // Immediately acknowledge read receipt if chat is open
         get().markMessagesAsRead(selectedUser._id);
       }

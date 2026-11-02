@@ -13,11 +13,62 @@ export const getUsersForSidebar = async (req, res) => {
     const loggedInUserId = req.user._id?.toString();
 
     let dbUsers = [];
+    const conversationMap = new Map();
+
     if (mongoose.connection.readyState === 1) {
       try {
         dbUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+
+        // Fetch messages involving loggedInUserId to calculate last message & conversation status
+        const userObjectId = mongoose.Types.ObjectId.isValid(loggedInUserId)
+          ? new mongoose.Types.ObjectId(loggedInUserId)
+          : loggedInUserId;
+
+        const recentMessages = await Message.find({
+          $or: [
+            { senderId: userObjectId },
+            { receiverId: userObjectId },
+            { senderId: loggedInUserId },
+            { receiverId: loggedInUserId },
+          ],
+        }).sort({ createdAt: -1 });
+
+        for (const m of recentMessages) {
+          const partnerId =
+            m.senderId?.toString() === loggedInUserId
+              ? m.receiverId?.toString()
+              : m.senderId?.toString();
+
+          if (!partnerId) continue;
+
+          if (!conversationMap.has(partnerId)) {
+            conversationMap.set(partnerId, {
+              lastMessage: m.text ? m.text : m.image ? "📷 Photo" : m.audio ? "🎤 Voice message" : "",
+              lastMessageTime: m.createdAt,
+              unreadCount: m.receiverId?.toString() === loggedInUserId && m.status !== "read" ? 1 : 0,
+            });
+          } else if (m.receiverId?.toString() === loggedInUserId && m.status !== "read") {
+            const existing = conversationMap.get(partnerId);
+            existing.unreadCount = (existing.unreadCount || 0) + 1;
+          }
+        }
       } catch (dbErr) {
         console.warn("DB query failed in getUsersForSidebar, falling back to demo users:", dbErr.message);
+      }
+    }
+
+    // In-memory messages fallback
+    for (const m of inMemoryMessages) {
+      const partnerId =
+        m.senderId === loggedInUserId ? m.receiverId : m.receiverId === loggedInUserId ? m.senderId : null;
+      if (!partnerId) continue;
+
+      if (!conversationMap.has(partnerId)) {
+        conversationMap.set(partnerId, {
+          lastMessage: m.text ? m.text : m.image ? "📷 Photo" : m.audio ? "🎤 Voice message" : "",
+          lastMessageTime: m.createdAt,
+          unreadCount: m.receiverId === loggedInUserId && m.status !== "read" ? 1 : 0,
+        });
       }
     }
 
@@ -27,12 +78,27 @@ export const getUsersForSidebar = async (req, res) => {
     );
 
     const userMap = new Map();
-    otherDemoUsers.forEach((u) => userMap.set(u._id.toString(), u));
+    otherDemoUsers.forEach((u) => userMap.set(u._id.toString(), { ...u }));
     if (dbUsers && dbUsers.length > 0) {
-      dbUsers.forEach((u) => userMap.set(u._id.toString(), u));
+      dbUsers.forEach((u) => {
+        const uObj = u.toObject ? u.toObject() : u;
+        userMap.set(uObj._id.toString(), uObj);
+      });
     }
 
-    return res.status(200).json(Array.from(userMap.values()));
+    // Decorate users with conversation details (WhatsApp style)
+    const decoratedUsers = Array.from(userMap.values()).map((user) => {
+      const meta = conversationMap.get(user._id.toString());
+      return {
+        ...user,
+        lastMessage: meta?.lastMessage || null,
+        lastMessageTime: meta?.lastMessageTime || null,
+        unreadCount: meta?.unreadCount || 0,
+        hasConversation: Boolean(meta),
+      };
+    });
+
+    return res.status(200).json(decoratedUsers);
   } catch (error) {
     console.error("Error in getUsersForSidebar: ", error.message);
     const fallbackUsers = Object.values(DEMO_USERS).filter(
@@ -51,8 +117,17 @@ export const getMessages = async (req, res) => {
 
     if (mongoose.connection.readyState === 1) {
       try {
+        const myObjectId = mongoose.Types.ObjectId.isValid(myId)
+          ? new mongoose.Types.ObjectId(myId)
+          : myId;
+        const chatObjectId = mongoose.Types.ObjectId.isValid(userToChatId)
+          ? new mongoose.Types.ObjectId(userToChatId)
+          : userToChatId;
+
         const query = {
           $or: [
+            { senderId: myObjectId, receiverId: chatObjectId },
+            { senderId: chatObjectId, receiverId: myObjectId },
             { senderId: myId, receiverId: userToChatId },
             { senderId: userToChatId, receiverId: myId },
           ],
