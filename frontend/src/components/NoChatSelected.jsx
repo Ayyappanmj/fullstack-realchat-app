@@ -7,7 +7,7 @@ const NoChatSelected = () => {
   const { users, setSelectedUser } = useChatStore();
 
   const otherOnlineUsers = users.filter(
-    (u) => onlineUsers.includes(u._id) && u._id !== authUser?._id
+    (u) => Boolean(u.hasConversation) && onlineUsers.includes(u._id) && u._id !== authUser?._id
   );
 
   return (

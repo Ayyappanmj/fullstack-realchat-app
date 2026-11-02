@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import AuthImagePattern from "../components/AuthImagePattern";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare } from "lucide-react";
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -17,14 +17,9 @@ const LoginPage = () => {
     login(formData);
   };
 
-  const handleDemoLogin = (email, password) => {
-    setFormData({ email, password });
-    login({ email, password });
-  };
-
   return (
     <div className="min-h-[100dvh] grid lg:grid-cols-2 bg-base-200/50">
-      {/* Left Side - Form & Recruiter Quick Demo */}
+      {/* Left Side - Form */}
       <div className="flex flex-col justify-center items-center p-6 sm:p-12">
         <div className="w-full max-w-md space-y-6">
           {/* Logo & Heading */}
@@ -37,58 +32,10 @@ const LoginPage = () => {
                 Welcome to Chatty
               </h1>
               <p className="text-xs sm:text-sm text-base-content/60">
-                Sign in to your account or launch instant recruiter demo
+                Sign in to continue to your messages
               </p>
             </div>
           </div>
-
-          {/* Recruiter 1-Click Demo Banner */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 border border-primary/20 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <Sparkles className="size-3.5" />
-                <span>Recruiter Instant Demo (1-Click)</span>
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                Fast Track
-              </span>
-            </div>
-            <p className="text-xs text-base-content/70">
-              Open two browser windows to test real-time Socket.io chat side-by-side:
-            </p>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={isLoggingIn}
-                onClick={() => handleDemoLogin("noby@demo.com", "demo1234")}
-                className="btn btn-sm btn-outline btn-primary rounded-xl flex items-center justify-center gap-2 font-medium hover:scale-[1.02] transition-transform"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"
-                  alt="Noby"
-                  className="size-5 rounded-full object-cover"
-                />
-                <span className="truncate">Noby (Demo 1)</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isLoggingIn}
-                onClick={() => handleDemoLogin("elsa@demo.com", "demo1234")}
-                className="btn btn-sm btn-outline btn-primary rounded-xl flex items-center justify-center gap-2 font-medium hover:scale-[1.02] transition-transform"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80"
-                  alt="Elsa"
-                  className="size-5 rounded-full object-cover"
-                />
-                <span className="truncate">Elsa (Demo 2)</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="divider text-xs text-base-content/40 my-1">OR ENTER CREDENTIALS</div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">

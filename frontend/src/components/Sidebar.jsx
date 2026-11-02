@@ -10,14 +10,13 @@ import {
   Search,
   X,
   Compass,
-  CheckCheck,
 } from "lucide-react";
 
 const Sidebar = () => {
   const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
   const { onlineUsers, authUser } = useAuthStore();
 
-  // WhatsApp style: "chats" (Recent active conversations only) | "explore" (All contacts to start new chat) | "online"
+  // WhatsApp style: "chats" (Recent active conversations only) | "explore" (Search contacts) | "online"
   const [filterMode, setFilterMode] = useState("chats");
   const [localSearch, setLocalSearch] = useState("");
   const searchInputRef = useRef(null);
@@ -40,9 +39,10 @@ const Sidebar = () => {
       .sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
   }, [users]);
 
+  // Only count online status of users you actually have conversations with (privacy)
   const onlineCount = useMemo(() => {
-    return users.filter((user) => onlineUsers.includes(user._id)).length;
-  }, [users, onlineUsers]);
+    return conversations.filter((user) => onlineUsers.includes(user._id)).length;
+  }, [conversations, onlineUsers]);
 
   // Filtered list based on active tab and search query
   const filteredUsers = useMemo(() => {
@@ -50,9 +50,13 @@ const Sidebar = () => {
     if (filterMode === "chats") {
       baseList = conversations;
     } else if (filterMode === "online") {
-      baseList = users.filter((u) => onlineUsers.includes(u._id));
+      baseList = conversations.filter((u) => onlineUsers.includes(u._id));
     } else {
-      // "explore" / "all"
+      // "explore" / "New Chat" mode:
+      // STRICT PRIVACY: Do NOT dump all accounts! Only return users when actively searched
+      if (!localSearch.trim()) {
+        return [];
+      }
       baseList = users;
     }
 
@@ -69,6 +73,18 @@ const Sidebar = () => {
     return baseList;
   }, [conversations, users, onlineUsers, filterMode, localSearch]);
 
+  // Directory users matching search who are NOT yet in recent conversations
+  const directoryMatches = useMemo(() => {
+    if (filterMode !== "chats" || !localSearch.trim()) return [];
+    const query = localSearch.toLowerCase().trim();
+    const convIds = new Set(conversations.map((c) => c._id));
+    return users.filter(
+      (user) =>
+        !convIds.has(user._id) &&
+        (user.fullName?.toLowerCase().includes(query) || user.email?.toLowerCase().includes(query))
+    );
+  }, [filterMode, localSearch, conversations, users]);
+
   const handleOpenExplore = () => {
     setFilterMode("explore");
     setLocalSearch("");
@@ -77,7 +93,109 @@ const Sidebar = () => {
     }, 100);
   };
 
+  const handleSelectUser = (user) => {
+    setSelectedUser(user);
+    if (filterMode === "explore") {
+      setFilterMode("chats");
+      setLocalSearch("");
+    }
+  };
+
   if (isUsersLoading) return <SidebarSkeleton />;
+
+  const renderUserButton = (user) => {
+    const isSelected = selectedUser?._id === user._id;
+    const isOnline = onlineUsers.includes(user._id);
+    const timeDisplay = user.lastMessageTime
+      ? formatConversationTime(user.lastMessageTime)
+      : null;
+
+    return (
+      <button
+        key={user._id}
+        onClick={() => handleSelectUser(user)}
+        className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-left transition-all duration-150 group ${
+          isSelected
+            ? "bg-primary text-primary-content shadow-md shadow-primary/20 scale-[0.99]"
+            : "hover:bg-base-200/80 text-base-content"
+        }`}
+      >
+        {/* Avatar with Status Ring */}
+        <div className="relative shrink-0">
+          <img
+            src={user.profilePic || "/avatar.png"}
+            alt={user.fullName}
+            className="size-11 object-cover rounded-full ring-2 ring-base-content/5 shadow-sm"
+          />
+          {isOnline ? (
+            <span className="absolute bottom-0 right-0 size-3 bg-emerald-500 rounded-full ring-2 ring-base-100" />
+          ) : (
+            <span className="absolute bottom-0 right-0 size-2.5 bg-base-content/20 rounded-full ring-2 ring-base-100" />
+          )}
+        </div>
+
+        {/* Conversation Meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span
+              className={`font-semibold text-sm truncate ${
+                isSelected ? "text-primary-content" : "text-base-content"
+              }`}
+            >
+              {user.fullName}
+            </span>
+
+            {/* Time Stamp or Online Badge */}
+            {timeDisplay && filterMode === "chats" ? (
+              <span
+                className={`text-[11px] shrink-0 ml-1.5 ${
+                  isSelected ? "text-primary-content/80" : "text-base-content/50"
+                }`}
+              >
+                {timeDisplay}
+              </span>
+            ) : (
+              <span
+                className={`text-[11px] shrink-0 ml-1.5 ${
+                  isSelected
+                    ? "text-primary-content/80"
+                    : isOnline
+                    ? "text-emerald-500 font-medium"
+                    : "text-base-content/40"
+                }`}
+              >
+                {isOnline ? "online" : "offline"}
+              </span>
+            )}
+          </div>
+
+          {/* Subtitle: Last Message Preview OR Email */}
+          <div className="flex items-center justify-between gap-1 mt-0.5">
+            <p
+              className={`text-xs truncate ${
+                isSelected
+                  ? "text-primary-content/80"
+                  : user.unreadCount > 0
+                  ? "font-semibold text-base-content"
+                  : "text-base-content/60"
+              }`}
+            >
+              {user.lastMessage ? user.lastMessage : user.email}
+            </p>
+
+            {/* Unread message counter badge */}
+            {user.unreadCount > 0 && (
+              <span className="badge badge-xs badge-primary shrink-0 font-bold px-1.5 py-2">
+                {user.unreadCount}
+              </span>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  const hasAnyItems = filteredUsers.length > 0 || directoryMatches.length > 0;
 
   return (
     <aside className="h-full w-full md:w-80 lg:w-88 border-r border-base-content/10 flex flex-col bg-base-100/60 backdrop-blur-md transition-all duration-300">
@@ -100,14 +218,16 @@ const Sidebar = () => {
                   ? "Chats"
                   : filterMode === "explore"
                   ? "New Chat"
-                  : "Online Users"}
+                  : "Online Contacts"}
               </h2>
               <p className="text-xs text-base-content/60">
                 {filterMode === "chats"
                   ? `${conversations.length} active ${
                       conversations.length === 1 ? "conversation" : "conversations"
                     }`
-                  : `${users.length} registered ${users.length === 1 ? "contact" : "contacts"}`}
+                  : filterMode === "explore"
+                  ? "Search by name or email"
+                  : `${onlineCount} contacts online`}
               </p>
             </div>
           </div>
@@ -123,7 +243,7 @@ const Sidebar = () => {
                   ? "btn-primary shadow-sm"
                   : "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/80"
               }`}
-              title={filterMode === "explore" ? "Back to Recent Chats" : "Start New Chat / Explore"}
+              title={filterMode === "explore" ? "Back to Recent Chats" : "Start New Chat"}
             >
               <MessageSquarePlus className="size-4" />
             </button>
@@ -158,7 +278,7 @@ const Sidebar = () => {
             placeholder={
               filterMode === "chats"
                 ? "Search recent conversations..."
-                : "Search contacts to start chat..."
+                : "Search by name or email to chat..."
             }
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
@@ -197,7 +317,7 @@ const Sidebar = () => {
                 : "btn-ghost bg-base-200/70 hover:bg-base-200 text-base-content/70"
             }`}
           >
-            New Chat ({users.length})
+            + New Chat
           </button>
           <button
             onClick={() => {
@@ -217,7 +337,7 @@ const Sidebar = () => {
 
       {/* Users / Conversation List */}
       <div className="overflow-y-auto flex-1 p-2 space-y-1">
-        {filteredUsers.length === 0 ? (
+        {!hasAnyItems ? (
           filterMode === "chats" && !localSearch ? (
             /* WhatsApp Empty State for New Users */
             <div className="flex flex-col items-center justify-center h-64 text-center p-6 space-y-3">
@@ -227,7 +347,7 @@ const Sidebar = () => {
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-base-content">No conversations yet</p>
                 <p className="text-xs text-base-content/60 max-w-[200px] leading-relaxed">
-                  Start your first private chat by selecting a contact below.
+                  Start your first private chat by searching for a contact.
                 </p>
               </div>
               <button
@@ -238,6 +358,19 @@ const Sidebar = () => {
                 <span>Start a New Chat</span>
               </button>
             </div>
+          ) : filterMode === "explore" && !localSearch ? (
+            /* New Chat - Clean Privacy State (No Accounts Dumped!) */
+            <div className="flex flex-col items-center justify-center h-64 text-center p-6 space-y-3">
+              <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
+                <Search className="size-7" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-base-content">Find someone to chat with</p>
+                <p className="text-xs text-base-content/60 max-w-[220px] leading-relaxed">
+                  Type a name or email address in the search box above to start a private conversation.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-48 text-center p-4">
               <div className="size-12 rounded-full bg-base-200 flex items-center justify-center mb-2 text-base-content/40">
@@ -245,109 +378,24 @@ const Sidebar = () => {
               </div>
               <p className="text-sm font-medium text-base-content/70">No contacts found</p>
               <p className="text-xs text-base-content/50 mt-0.5">
-                {localSearch ? "Try a different search term" : "No users are currently available"}
+                {localSearch ? `No matches for "${localSearch}"` : "No users are currently available"}
               </p>
             </div>
           )
         ) : (
-          filteredUsers.map((user) => {
-            const isSelected = selectedUser?._id === user._id;
-            const isOnline = onlineUsers.includes(user._id);
-            const timeDisplay = user.lastMessageTime
-              ? formatConversationTime(user.lastMessageTime)
-              : null;
+          <>
+            {filteredUsers.map((user) => renderUserButton(user))}
 
-            return (
-              <button
-                key={user._id}
-                onClick={() => {
-                  setSelectedUser(user);
-                  // If picked from Explore, seamlessly transition back to chats mode
-                  if (filterMode === "explore") {
-                    setFilterMode("chats");
-                    setLocalSearch("");
-                  }
-                }}
-                className={`w-full p-2.5 rounded-xl flex items-center gap-3 text-left transition-all duration-150 group ${
-                  isSelected
-                    ? "bg-primary text-primary-content shadow-md shadow-primary/20 scale-[0.99]"
-                    : "hover:bg-base-200/80 text-base-content"
-                }`}
-              >
-                {/* Avatar with Status Ring */}
-                <div className="relative shrink-0">
-                  <img
-                    src={user.profilePic || "/avatar.png"}
-                    alt={user.fullName}
-                    className="size-11 object-cover rounded-full ring-2 ring-base-content/5 shadow-sm"
-                  />
-                  {isOnline ? (
-                    <span className="absolute bottom-0 right-0 size-3 bg-emerald-500 rounded-full ring-2 ring-base-100" />
-                  ) : (
-                    <span className="absolute bottom-0 right-0 size-2.5 bg-base-content/20 rounded-full ring-2 ring-base-100" />
-                  )}
+            {directoryMatches.length > 0 && (
+              <div className="pt-2">
+                <div className="px-2 py-1.5 text-[11px] font-semibold text-base-content/50 uppercase tracking-wider flex items-center gap-1.5">
+                  <Compass className="size-3.5 text-primary" />
+                  <span>Start new conversation with</span>
                 </div>
-
-                {/* Conversation Meta (WhatsApp style) */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`font-semibold text-sm truncate ${
-                        isSelected ? "text-primary-content" : "text-base-content"
-                      }`}
-                    >
-                      {user.fullName}
-                    </span>
-
-                    {/* Time Stamp or Online Badge */}
-                    {timeDisplay && filterMode === "chats" ? (
-                      <span
-                        className={`text-[11px] shrink-0 ml-1.5 ${
-                          isSelected ? "text-primary-content/80" : "text-base-content/50"
-                        }`}
-                      >
-                        {timeDisplay}
-                      </span>
-                    ) : (
-                      <span
-                        className={`text-[11px] shrink-0 ml-1.5 ${
-                          isSelected
-                            ? "text-primary-content/80"
-                            : isOnline
-                            ? "text-emerald-500 font-medium"
-                            : "text-base-content/40"
-                        }`}
-                      >
-                        {isOnline ? "online" : "offline"}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Subtitle: Last Message Preview OR Email */}
-                  <div className="flex items-center justify-between gap-1 mt-0.5">
-                    <p
-                      className={`text-xs truncate ${
-                        isSelected
-                          ? "text-primary-content/80"
-                          : user.unreadCount > 0
-                          ? "font-semibold text-base-content"
-                          : "text-base-content/60"
-                      }`}
-                    >
-                      {user.lastMessage ? user.lastMessage : user.email}
-                    </p>
-
-                    {/* Unread message counter badge */}
-                    {user.unreadCount > 0 && (
-                      <span className="badge badge-xs badge-primary shrink-0 font-bold px-1.5 py-2">
-                        {user.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })
+                {directoryMatches.map((user) => renderUserButton(user))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

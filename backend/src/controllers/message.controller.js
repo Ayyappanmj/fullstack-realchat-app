@@ -3,7 +3,6 @@ import Message from "../models/message.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 import mongoose from "mongoose";
-import { DEMO_USERS } from "../lib/demoUsers.js";
 
 // In-memory fallback message storage to guarantee 100% demo uptime
 const inMemoryMessages = [];
@@ -18,6 +17,9 @@ export const getUsersForSidebar = async (req, res) => {
     if (mongoose.connection.readyState === 1) {
       try {
         dbUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+
+        // Exclude demo/test accounts so dummy accounts are not listed
+        dbUsers = dbUsers.filter((u) => !u.email?.toLowerCase().endsWith("@demo.com"));
 
         // Fetch messages involving loggedInUserId to calculate last message & conversation status
         const userObjectId = mongoose.Types.ObjectId.isValid(loggedInUserId)
@@ -72,13 +74,7 @@ export const getUsersForSidebar = async (req, res) => {
       }
     }
 
-    // Always include other demo users (Noby / Elsa) for immediate instant testing
-    const otherDemoUsers = Object.values(DEMO_USERS).filter(
-      (u) => u._id.toString() !== loggedInUserId
-    );
-
     const userMap = new Map();
-    otherDemoUsers.forEach((u) => userMap.set(u._id.toString(), { ...u }));
     if (dbUsers && dbUsers.length > 0) {
       dbUsers.forEach((u) => {
         const uObj = u.toObject ? u.toObject() : u;
@@ -101,10 +97,7 @@ export const getUsersForSidebar = async (req, res) => {
     return res.status(200).json(decoratedUsers);
   } catch (error) {
     console.error("Error in getUsersForSidebar: ", error.message);
-    const fallbackUsers = Object.values(DEMO_USERS).filter(
-      (u) => u._id.toString() !== req.user._id?.toString()
-    );
-    res.status(200).json(fallbackUsers);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
